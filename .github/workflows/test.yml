@@ -1,0 +1,85 @@
+name: Test Python Examples
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests cryptography pyperclip flask
+        pip install pylint flake8
+
+    - name: Lint with flake8
+      run: |
+        # Stop build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+
+    - name: Check imports
+      run: |
+        python -c "import sys; sys.path.insert(0, '.'); import basic_example"
+        python -c "import sys; sys.path.insert(0, '.'); import encrypted_example"
+        python -c "import sys; sys.path.insert(0, '.'); import ip_tracker"
+        python -c "import sys; sys.path.insert(0, '.'); import clipboard_sync"
+        python -c "import sys; sys.path.insert(0, '.'); import one_time_secret"
+        python -c "import sys; sys.path.insert(0, '.'); import sensor_dashboard"
+        python -c "import sys; sys.path.insert(0, '.'); import webhook_receiver"
+
+    - name: Test help commands
+      run: |
+        python ip_tracker.py --help
+        python clipboard_sync.py --help
+        python one_time_secret.py --help
+        python sensor_dashboard.py --help
+        python webhook_receiver.py --help
+
+    - name: Test basic functionality
+      run: |
+        # Test imports work
+        python -c "
+        from ip_tracker import IPTracker
+        from clipboard_sync import ClipboardSync
+        from one_time_secret import OneTimeSecret
+        from sensor_dashboard import SensorDashboard
+        from webhook_receiver import WebhookReceiver
+        print('✓ All classes import successfully')
+        "
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install pylint
+      run: |
+        python -m pip install --upgrade pip
+        pip install pylint requests cryptography pyperclip flask
+
+    - name: Analyze with pylint
+      run: |
+        pylint --disable=C,R,W *.py || true
+        echo "✓ Pylint analysis complete"
