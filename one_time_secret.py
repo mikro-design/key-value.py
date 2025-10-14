@@ -2,11 +2,11 @@
 """
 One-Time Secret Service
 
-Share secrets (passwords, API keys) that self-destruct after being read once.
+Share secrets (passwords, API keys) that become invalid after being read once.
 More secure than sending secrets via email or chat.
 
 Features:
-- Secrets are deleted after first read
+- Secrets are invalidated after first read
 - Optional password protection
 - Expiration time (TTL)
 - Client-side encryption
@@ -32,6 +32,7 @@ Usage:
     python one_time_secret.py read your-five-word-token --password mypass
 """
 
+import os
 import requests
 import json
 import argparse
@@ -45,7 +46,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 # Configuration
-API_URL = "http://localhost:3000"  # Change to your deployed URL
+API_URL = os.environ.get("API_URL", "https://key-value.co")
 
 
 class OneTimeSecret:
@@ -69,7 +70,6 @@ class OneTimeSecret:
         """Encrypt content with optional password."""
         if password:
             # Use password-based encryption
-            import os
             salt = os.urandom(16)
             cipher = self._create_cipher(password, salt)
             encrypted = cipher.encrypt(content.encode())
@@ -103,14 +103,9 @@ class OneTimeSecret:
             # No encryption, just decode
             return base64.b64decode(data["content"]).decode('utf-8')
 
-    def generate_token(self) -> str:
-        """Generate a new token."""
-        response = requests.get(f"{self.base_url}/api/generate")
-        response.raise_for_status()
-        return response.json()["token"]
-
     def create(
         self,
+        token: str,
         secret: str,
         password: Optional[str] = None,
         ttl: Optional[int] = None
@@ -119,6 +114,7 @@ class OneTimeSecret:
         Create a one-time secret.
 
         Args:
+            token: The pre-generated token
             secret: The secret content
             password: Optional password protection
             ttl: Time-to-live in seconds
@@ -126,8 +122,8 @@ class OneTimeSecret:
         Returns:
             Token and share URL
         """
-        # Generate token
-        token = self.generate_token()
+        if not token:
+            raise ValueError("Token is required to create a one-time secret")
 
         # Encrypt secret
         encrypted_data = self._encrypt(secret, password)
@@ -143,7 +139,6 @@ class OneTimeSecret:
 
         # Store with TTL
         payload = {
-            "token": token,
             "data": data
         }
         if ttl:
@@ -152,7 +147,10 @@ class OneTimeSecret:
         response = requests.post(
             f"{self.base_url}/api/store",
             json=payload,
-            headers={"Content-Type": "application/json"}
+            headers={
+                "Content-Type": "application/json",
+                "X-KV-Token": token
+            }
         )
         response.raise_for_status()
 
@@ -178,7 +176,7 @@ class OneTimeSecret:
         try:
             response = requests.get(
                 f"{self.base_url}/api/retrieve",
-                params={"token": token}
+                headers={"X-KV-Token": token}
             )
             response.raise_for_status()
             data = response.json()["data"]
@@ -208,40 +206,49 @@ class OneTimeSecret:
                 "error": f"Failed to decrypt: {str(e)}"
             }
 
-        # Increment view count and check if should delete
+        # Increment view count and check if should mark consumed
         data["views"] = data.get("views", 0) + 1
 
         if data["views"] >= data.get("max_views", 1):
-            # Delete the secret after reading
-            self._delete_secret(token)
-            deleted = True
+            # Overwrite the secret after reading
+            self._mark_consumed(token)
+            consumed = True
         else:
             # Update view count
             requests.post(
                 f"{self.base_url}/api/store",
-                json={"token": token, "data": data},
-                headers={"Content-Type": "application/json"}
+                json={"data": data},
+                headers={
+                    "Content-Type": "application/json",
+                    "X-KV-Token": token
+                }
             )
-            deleted = False
+            consumed = False
 
         return {
             "success": True,
             "secret": secret_content,
             "created_at": data.get("created_at"),
             "views": data["views"],
-            "deleted": deleted
+            "consumed": consumed
         }
 
-    def _delete_secret(self, token: str):
-        """Delete a secret."""
+    def _mark_consumed(self, token: str):
+        """Overwrite secret to prevent future reads without deleting the token."""
+        placeholder = {
+            "consumed": True,
+            "consumed_at": datetime.utcnow().isoformat() + "Z"
+        }
         try:
-            # Try to use delete endpoint if available
-            response = requests.delete(
-                f"{self.base_url}/api/delete",
-                params={"token": token}
+            requests.post(
+                f"{self.base_url}/api/store",
+                json={"data": placeholder},
+                headers={
+                    "Content-Type": "application/json",
+                    "X-KV-Token": token
+                }
             )
-            # If 404 or other error, that's okay - secret is inaccessible anyway
-        except:
+        except Exception:
             pass
 
 
@@ -254,6 +261,11 @@ def main():
     # Create command
     create_parser = subparsers.add_parser("create", help="Create a one-time secret")
     create_parser.add_argument("secret", help="The secret to share")
+    create_parser.add_argument(
+        "--token",
+        default=os.environ.get("KV_TOKEN"),
+        help="Token to use for storing the secret (defaults to KV_TOKEN environment variable)"
+    )
     create_parser.add_argument("--password", help="Password protect the secret")
     create_parser.add_argument("--ttl", type=int, help="Time-to-live in seconds (e.g., 3600 = 1 hour)")
     create_parser.add_argument("--prompt-password", action="store_true", help="Prompt for password (secure)")
@@ -282,13 +294,18 @@ def main():
                 print("Passwords don't match!")
                 sys.exit(1)
 
+        token = args.token.strip() if args.token else None
+        if not token:
+            print("Error: token is required. Provide --token or set KV_TOKEN.")
+            sys.exit(1)
+
         print("Creating one-time secret...")
-        result = ots.create(args.secret, password=password, ttl=args.ttl)
+        result = ots.create(token, args.secret, password=password, ttl=args.ttl)
 
         print("\n✓ Secret created successfully!")
         print(f"\nToken: {result['token']}")
         print(f"\nShare this token with the recipient.")
-        print(f"The secret will be deleted after it's read once.")
+        print(f"The secret becomes invalid after it's read once.")
 
         if result['password_protected']:
             print(f"\n⚠️  Password required: Share the password separately!")
@@ -318,8 +335,8 @@ def main():
             print(result['secret'])
             print("="*60)
 
-            if result['deleted']:
-                print("\n✓ Secret has been deleted and cannot be read again.")
+        if result['consumed']:
+            print("\n✓ Secret has been consumed and cannot be read again.")
             else:
                 print(f"\n⚠️  Secret has been viewed {result['views']} time(s)")
 

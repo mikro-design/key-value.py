@@ -32,6 +32,7 @@ Usage:
     python webhook_receiver.py --token YOUR-TOKEN test
 """
 
+import os
 import requests
 import json
 import argparse
@@ -45,7 +46,7 @@ except ImportError:
     Flask = None
 
 # Configuration
-API_URL = "http://localhost:3000"  # Change to your deployed URL
+API_URL = os.environ.get("API_URL", "https://key-value.co")
 MAX_WEBHOOKS = 50  # Keep last 50 webhooks
 
 
@@ -105,8 +106,11 @@ class WebhookReceiver:
         # Store
         response = requests.post(
             f"{self.base_url}/api/store",
-            json={"token": self.token, "data": data},
-            headers={"Content-Type": "application/json"}
+            json={"data": data},
+            headers={
+                "Content-Type": "application/json",
+                "X-KV-Token": self.token
+            }
         )
         response.raise_for_status()
 
@@ -225,7 +229,7 @@ class WebhookReceiver:
         try:
             response = requests.get(
                 f"{self.base_url}/api/retrieve",
-                params={"token": self.token}
+                headers={"X-KV-Token": self.token}
             )
             response.raise_for_status()
             return response.json()["data"]

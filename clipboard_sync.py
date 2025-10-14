@@ -28,6 +28,7 @@ Usage:
     python clipboard_sync.py --token YOUR-TOKEN monitor --mode pull --interval 5
 """
 
+import os
 import requests
 import json
 import time
@@ -44,7 +45,7 @@ except ImportError:
     sys.exit(1)
 
 # Configuration
-API_URL = "http://localhost:3000"  # Change to your deployed URL
+API_URL = os.environ.get("API_URL", "https://key-value.co")
 
 
 class ClipboardSync:
@@ -80,8 +81,11 @@ class ClipboardSync:
 
             response = requests.post(
                 f"{self.base_url}/api/store",
-                json={"token": self.token, "data": data},
-                headers={"Content-Type": "application/json"}
+                json={"data": data},
+                headers={
+                    "Content-Type": "application/json",
+                    "X-KV-Token": self.token
+                }
             )
             response.raise_for_status()
 
@@ -103,7 +107,7 @@ class ClipboardSync:
         try:
             response = requests.get(
                 f"{self.base_url}/api/retrieve",
-                params={"token": self.token}
+                headers={"X-KV-Token": self.token}
             )
             response.raise_for_status()
 
@@ -176,7 +180,7 @@ class ClipboardSync:
                         try:
                             response = requests.get(
                                 f"{self.base_url}/api/retrieve",
-                                params={"token": self.token}
+                                headers={"X-KV-Token": self.token}
                             )
                             response.raise_for_status()
                             data = response.json()["data"]

@@ -27,6 +27,7 @@ Usage:
     python ip_tracker.py --token YOUR-TOKEN get
 """
 
+import os
 import requests
 import json
 import time
@@ -36,7 +37,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 # Configuration
-API_URL = "http://localhost:3000"  # Change to your deployed URL
+API_URL = os.environ.get("API_URL", "https://key-value.co")
 IP_CHECK_SERVICES = [
     "https://api.ipify.org?format=json",
     "https://ifconfig.me/ip",
@@ -73,11 +74,11 @@ class IPTracker:
         """Store IP data in key-value store."""
         response = requests.post(
             f"{self.base_url}/api/store",
-            json={
-                "token": self.token,
-                "data": ip_data
-            },
-            headers={"Content-Type": "application/json"}
+            json={"data": ip_data},
+            headers={
+                "Content-Type": "application/json",
+                "X-KV-Token": self.token
+            }
         )
         response.raise_for_status()
         return response.json()
@@ -87,7 +88,7 @@ class IPTracker:
         try:
             response = requests.get(
                 f"{self.base_url}/api/retrieve",
-                params={"token": self.token}
+                headers={"X-KV-Token": self.token}
             )
             response.raise_for_status()
             return response.json()["data"]

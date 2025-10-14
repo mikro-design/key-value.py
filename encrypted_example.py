@@ -2,13 +2,16 @@
 """
 Encrypted Key-Value Store Example
 
-Demonstrates client-side encryption before storing sensitive data.
-The server stores encrypted data and cannot read the contents.
+Demonstrates client-side encryption before storing sensitive data with a
+user-provided token. The server stores encrypted data and cannot read the
+contents without the password.
 
 Requirements:
     pip install requests cryptography
 """
 
+import argparse
+import os
 import requests
 import json
 import base64
@@ -18,7 +21,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 # Configuration
-API_URL = "http://localhost:3000"  # Change to your deployed URL
+API_URL = os.environ.get("API_URL", "https://key-value.co")
 
 
 class EncryptedKeyValueClient:
@@ -49,13 +52,6 @@ class EncryptedKeyValueClient:
         )
         key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
         return Fernet(key)
-
-    def generate_token(self) -> str:
-        """Generate a new 5-word memorable token."""
-        response = requests.get(f"{self.base_url}/api/generate")
-        response.raise_for_status()
-        data = response.json()
-        return data['token']
 
     def _encrypt_data(self, data: Dict[Any, Any]) -> Dict[str, str]:
         """Encrypt data payload."""
@@ -90,7 +86,6 @@ class EncryptedKeyValueClient:
         encrypted_data = self._encrypt_data(data)
 
         payload = {
-            "token": token,
             "data": encrypted_data
         }
         if ttl:
@@ -99,7 +94,10 @@ class EncryptedKeyValueClient:
         response = requests.post(
             f"{self.base_url}/api/store",
             json=payload,
-            headers={"Content-Type": "application/json"}
+            headers={
+                "Content-Type": "application/json",
+                "X-KV-Token": token
+            }
         )
         response.raise_for_status()
         return response.json()
@@ -116,7 +114,7 @@ class EncryptedKeyValueClient:
         """
         response = requests.get(
             f"{self.base_url}/api/retrieve",
-            params={"token": token}
+            headers={"X-KV-Token": token}
         )
         response.raise_for_status()
         data = response.json()
@@ -126,20 +124,34 @@ class EncryptedKeyValueClient:
 
 def main():
     """Demonstrate encrypted key-value operations."""
+    parser = argparse.ArgumentParser(description="Encrypted key-value store example")
+    parser.add_argument(
+        "--token",
+        default=os.environ.get("KV_TOKEN"),
+        help="Token to use (defaults to KV_TOKEN environment variable)",
+    )
+    parser.add_argument(
+        "--password",
+        default="my-super-secret-password-123",
+        help="Password used to derive the encryption key",
+    )
+    args = parser.parse_args()
 
-    # Use a strong password for encryption
-    password = "my-super-secret-password-123"  # Change this!
+    if not args.token:
+        print("Error: token is required. Provide --token or set KV_TOKEN.")
+        return
+
+    password = args.password
+    token = args.token.strip()
 
     client = EncryptedKeyValueClient(API_URL, password)
 
-    # Step 1: Generate token
-    print("=== Generating Token ===")
-    token = client.generate_token()
-    print(f"Generated token: {token}")
+    print("=== Using Provided Token ===")
+    print(f"Token: {token}")
     print(f"Encryption password: {password}")
-    print(f"Keep both safe!\n")
+    print("Keep both safe!\n")
 
-    # Step 2: Store sensitive data (will be encrypted automatically)
+    # Step 1: Store sensitive data (will be encrypted automatically)
     print("=== Storing Encrypted Data ===")
     sensitive_data = {
         "api_key": "sk_live_1234567890abcdef",
@@ -158,7 +170,7 @@ def main():
     print(f"Store result: {json.dumps(result, indent=2)}")
     print("✓ Data encrypted and stored on server\n")
 
-    # Step 3: Retrieve and decrypt
+    # Step 2: Retrieve and decrypt
     print("=== Retrieving and Decrypting ===")
     retrieved = client.retrieve(token)
     print(f"Decrypted data: {json.dumps(retrieved, indent=2)}\n")
@@ -167,19 +179,19 @@ def main():
     assert retrieved == sensitive_data, "Data mismatch!"
     print("✓ Data successfully encrypted, stored, and decrypted!")
 
-    # Step 4: Show what's actually stored on the server
+    # Step 3: Show what's actually stored on the server
     print("\n=== What the Server Sees ===")
     response = requests.get(
         f"{API_URL}/api/retrieve",
-        params={"token": token}
+        headers={"X-KV-Token": token}
     )
     server_data = response.json()['data']
-    print(f"Encrypted payload on server:")
+    print("Encrypted payload on server:")
     print(f"  - encrypted: {server_data['encrypted']}")
     print(f"  - payload: {server_data['payload'][:80]}...")
     print("\n✓ Server cannot read your data without the password!")
 
-    # Step 5: Wrong password fails
+    # Step 4: Wrong password fails
     print("\n=== Testing Wrong Password ===")
     try:
         wrong_client = EncryptedKeyValueClient(API_URL, "wrong-password")

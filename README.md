@@ -21,19 +21,31 @@ pip install flask
 pip install adafruit-circuitpython-dht
 ```
 
+## Tokens
+
+All examples assume you have already created a token via the key-value.co dashboard (or your own deployment). The scripts never delete tokens; they only store or overwrite data. Export your token before running scripts, or pass it explicitly:
+
+```bash
+export KV_TOKEN="your-five-word-token"
+# or
+python basic_example.py --token your-five-word-token
+```
+
 ## Examples
 
 ### 1. Basic Example (`basic_example.py`)
 
-Demonstrates basic operations:
-- Generate a memorable token
+Demonstrates basic operations with your pre-generated token:
 - Store JSON data
 - Retrieve data
 - Update data
 
 **Usage:**
 ```bash
-python basic_example.py
+# Provide your token via CLI flag or KV_TOKEN environment variable
+python basic_example.py --token YOUR-FIVE-WORD-TOKEN
+# or
+KV_TOKEN=YOUR-FIVE-WORD-TOKEN python basic_example.py
 ```
 
 ### 2. Encrypted Example (`encrypted_example.py`)
@@ -46,7 +58,7 @@ Shows client-side encryption for sensitive data:
 
 **Usage:**
 ```bash
-python encrypted_example.py
+python encrypted_example.py --token YOUR-FIVE-WORD-TOKEN
 ```
 
 ### 3. IP Tracker (`ip_tracker.py`)
@@ -60,7 +72,7 @@ A practical service to track your external IP address:
 **Usage:**
 
 ```bash
-# Generate a token first
+# Obtain a token first
 TOKEN="your-five-word-token"
 
 # One-time IP update
@@ -148,7 +160,7 @@ python clipboard_sync.py --token $TOKEN pull
 Share passwords and API keys securely - they self-destruct after being read once.
 
 **Features:**
-- Auto-delete after first read
+- Auto-invalidate after first read
 - Optional password protection
 - Expiration time (TTL)
 - Client-side encryption
@@ -157,13 +169,13 @@ Share passwords and API keys securely - they self-destruct after being read once
 
 ```bash
 # Create a one-time secret
-python one_time_secret.py create "Database password: MySecretPass123"
+python one_time_secret.py create "Database password: MySecretPass123" --token YOUR-FIVE-WORD-TOKEN
 
 # With password protection
-python one_time_secret.py create "API Key: sk_live_123" --prompt-password
+python one_time_secret.py create "API Key: sk_live_123" --token YOUR-FIVE-WORD-TOKEN --prompt-password
 
 # With expiration (1 hour = 3600 seconds)
-python one_time_secret.py create "Temp token" --ttl 3600
+python one_time_secret.py create "Temp token" --token YOUR-FIVE-WORD-TOKEN --ttl 3600
 
 # Read a secret
 python one_time_secret.py read your-five-word-token
@@ -175,7 +187,7 @@ python one_time_secret.py read your-five-word-token --prompt-password
 **Real-world Example:**
 ```bash
 # Share SSH private key temporarily
-python one_time_secret.py create "$(cat ~/.ssh/id_rsa)" --password MyPass --ttl 1800
+python one_time_secret.py create "$(cat ~/.ssh/id_rsa)" --token YOUR-FIVE-WORD-TOKEN --password MyPass --ttl 1800
 
 # Send token to colleague via Slack/email
 # They read it once, then it's gone forever
@@ -278,15 +290,10 @@ python webhook_receiver.py --token $TOKEN test
 
 ## Configuration
 
-All examples default to `http://localhost:3000`. To use a different URL:
+All examples default to the hosted service at `https://key-value.co`. To point at another deployment:
 
-1. Edit `API_URL` in each file, or
-2. Pass `--url` parameter (for ip_tracker.py)
-
-**For production:**
-```python
-API_URL = "https://your-domain.com"
-```
+1. Set an environment variable before running: `export API_URL=https://your-domain.com`
+2. (Optional) For scripts with CLI support, pass `--url https://your-domain.com`
 
 ## Security Notes
 

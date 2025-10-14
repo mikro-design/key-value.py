@@ -2,18 +2,19 @@
 """
 Basic Key-Value Store Example
 
-Demonstrates basic usage of the key-value web service:
-- Generate a token
+Demonstrates basic usage of the key-value web service with a pre-generated token:
 - Store JSON data
 - Retrieve the data
 """
 
+import os
+import argparse
 import requests
 import json
 from typing import Dict, Any, Optional
 
 # Configuration
-API_URL = "http://localhost:3000"  # Change to your deployed URL
+API_URL = os.environ.get("API_URL", "https://key-value.co")
 
 
 class KeyValueClient:
@@ -21,13 +22,6 @@ class KeyValueClient:
 
     def __init__(self, base_url: str):
         self.base_url = base_url.rstrip('/')
-
-    def generate_token(self) -> str:
-        """Generate a new 5-word memorable token."""
-        response = requests.get(f"{self.base_url}/api/generate")
-        response.raise_for_status()
-        data = response.json()
-        return data['token']
 
     def store(self, token: str, data: Dict[Any, Any], ttl: Optional[int] = None) -> Dict:
         """
@@ -42,7 +36,6 @@ class KeyValueClient:
             Response data with success status and size
         """
         payload = {
-            "token": token,
             "data": data
         }
         if ttl:
@@ -51,7 +44,10 @@ class KeyValueClient:
         response = requests.post(
             f"{self.base_url}/api/store",
             json=payload,
-            headers={"Content-Type": "application/json"}
+            headers={
+                "Content-Type": "application/json",
+                "X-KV-Token": token
+            }
         )
         response.raise_for_status()
         return response.json()
@@ -68,7 +64,7 @@ class KeyValueClient:
         """
         response = requests.get(
             f"{self.base_url}/api/retrieve",
-            params={"token": token}
+            headers={"X-KV-Token": token}
         )
         response.raise_for_status()
         data = response.json()
@@ -77,13 +73,23 @@ class KeyValueClient:
 
 def main():
     """Demonstrate basic key-value store operations."""
+    parser = argparse.ArgumentParser(description="Basic key-value store example")
+    parser.add_argument(
+        "--token",
+        default=os.environ.get("KV_TOKEN"),
+        help="Token to use (defaults to KV_TOKEN environment variable)",
+    )
+    args = parser.parse_args()
+
+    if not args.token:
+        print("Error: token is required. Provide --token or set KV_TOKEN.")
+        return
+
     client = KeyValueClient(API_URL)
 
-    # Step 1: Generate a token
-    print("=== Generating Token ===")
-    token = client.generate_token()
-    print(f"Generated token: {token}")
-    print(f"Remember this token! You'll need it to retrieve your data.\n")
+    token = args.token.strip()
+    print("=== Using Provided Token ===")
+    print(f"Token: {token}\n")
 
     # Step 2: Store some data
     print("=== Storing Data ===")

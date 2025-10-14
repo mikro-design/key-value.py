@@ -38,6 +38,7 @@ Usage:
         --command "python read_sensor.py" --interval 60
 """
 
+import os
 import requests
 import json
 import argparse
@@ -48,7 +49,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 # Configuration
-API_URL = "http://localhost:3000"  # Change to your deployed URL
+API_URL = os.environ.get("API_URL", "https://key-value.co")
 MAX_HISTORY = 100  # Keep last 100 readings
 
 
@@ -112,8 +113,11 @@ class SensorDashboard:
         # Store
         response = requests.post(
             f"{self.base_url}/api/store",
-            json={"token": self.token, "data": data},
-            headers={"Content-Type": "application/json"}
+            json={"data": data},
+            headers={
+                "Content-Type": "application/json",
+                "X-KV-Token": self.token
+            }
         )
         response.raise_for_status()
 
@@ -269,7 +273,7 @@ class SensorDashboard:
         try:
             response = requests.get(
                 f"{self.base_url}/api/retrieve",
-                params={"token": self.token}
+                headers={"X-KV-Token": self.token}
             )
             response.raise_for_status()
             return response.json()["data"]
