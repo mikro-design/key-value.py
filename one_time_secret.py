@@ -42,7 +42,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 # Configuration
 API_URL = "http://localhost:3000"  # Change to your deployed URL
@@ -56,7 +56,7 @@ class OneTimeSecret:
 
     def _create_cipher(self, password: str, salt: bytes) -> Fernet:
         """Create Fernet cipher from password."""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
