@@ -335,8 +335,8 @@ def main():
             print(result['secret'])
             print("="*60)
 
-        if result['consumed']:
-            print("\n✓ Secret has been consumed and cannot be read again.")
+            if result['consumed']:
+                print("\n✓ Secret has been consumed and cannot be read again.")
             else:
                 print(f"\n⚠️  Secret has been viewed {result['views']} time(s)")
 
