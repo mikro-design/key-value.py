@@ -1,10 +1,7 @@
 name: Integration Tests
 
 on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+  workflow_dispatch:
   schedule:
     # Run daily at 2am UTC
     - cron: '0 2 * * *'
@@ -12,7 +9,6 @@ on:
 jobs:
   test-against-api:
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || contains(github.event.head_commit.message, '[integration]')
 
     steps:
     - uses: actions/checkout@v4
