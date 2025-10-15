@@ -25,7 +25,8 @@ jobs:
 
     - name: Test basic operations
       env:
-        API_URL: ${{ secrets.TEST_API_URL || 'https://key-value.vercel.app' }}
+        API_URL: ${{ secrets.TEST_API_URL || 'https://key-value.co' }}
+        KV_TOKEN: ${{ secrets.TEST_KV_TOKEN }}
       run: |
         python -c "
         import requests
@@ -33,29 +34,36 @@ jobs:
         import sys
         import os
 
-        api_url = os.environ.get('API_URL', 'https://key-value.vercel.app')
+        api_url = os.environ.get('API_URL', 'https://key-value.co')
+        token = os.environ.get('KV_TOKEN')
+
+        if not token:
+            print('Error: KV_TOKEN secret is not configured.')
+            sys.exit(1)
+
         print(f'Testing against: {api_url}')
+        print(f'Using token: {token}')
 
-        # Test 1: Generate token
-        print('Test 1: Generate token...')
-        resp = requests.get(f'{api_url}/api/generate')
-        resp.raise_for_status()
-        token = resp.json()['token']
-        print(f'✓ Generated token: {token}')
-
-        # Test 2: Store data
-        print('Test 2: Store data...')
+        # Test 1: Store data
+        print('Test 1: Store data...')
         data = {'test': 'integration_test', 'timestamp': '2025-01-01'}
         resp = requests.post(
             f'{api_url}/api/store',
-            json={'token': token, 'data': data}
+            json={'data': data},
+            headers={
+                'Content-Type': 'application/json',
+                'X-KV-Token': token
+            }
         )
         resp.raise_for_status()
         print(f'✓ Stored data: {resp.json()}')
 
-        # Test 3: Retrieve data
-        print('Test 3: Retrieve data...')
-        resp = requests.get(f'{api_url}/api/retrieve', params={'token': token})
+        # Test 2: Retrieve data
+        print('Test 2: Retrieve data...')
+        resp = requests.get(
+            f'{api_url}/api/retrieve',
+            headers={'X-KV-Token': token}
+        )
         resp.raise_for_status()
         retrieved = resp.json()['data']
         print(f'✓ Retrieved data: {retrieved}')
@@ -67,7 +75,8 @@ jobs:
 
     - name: Test encrypted operations
       env:
-        API_URL: ${{ secrets.TEST_API_URL || 'https://key-value.vercel.app' }}
+        API_URL: ${{ secrets.TEST_API_URL || 'https://key-value.co' }}
+        KV_TOKEN: ${{ secrets.TEST_KV_TOKEN }}
       run: |
         python -c "
         import requests
@@ -77,11 +86,12 @@ jobs:
         from cryptography.fernet import Fernet
         import base64
 
-        api_url = os.environ.get('API_URL', 'https://key-value.vercel.app')
+        api_url = os.environ.get('API_URL', 'https://key-value.co')
+        token = os.environ.get('KV_TOKEN')
 
-        # Generate token
-        resp = requests.get(f'{api_url}/api/generate')
-        token = resp.json()['token']
+        if not token:
+            print('Error: KV_TOKEN secret is not configured.')
+            sys.exit(1)
 
         # Encrypt data
         key = Fernet.generate_key()
@@ -96,12 +106,19 @@ jobs:
         }
         resp = requests.post(
             f'{api_url}/api/store',
-            json={'token': token, 'data': data}
+            json={'data': data},
+            headers={
+                'Content-Type': 'application/json',
+                'X-KV-Token': token
+            }
         )
         resp.raise_for_status()
 
         # Retrieve and decrypt
-        resp = requests.get(f'{api_url}/api/retrieve', params={'token': token})
+        resp = requests.get(
+            f'{api_url}/api/retrieve',
+            headers={'X-KV-Token': token}
+        )
         retrieved = resp.json()['data']
         encrypted_data = base64.b64decode(retrieved['payload'])
         decrypted = json.loads(cipher.decrypt(encrypted_data).decode())
